@@ -36,6 +36,8 @@ even if running inside a vagrant box itself running inside a vagrant instance.
 * openweathermap api key is required as first argument
   There's certainly better ways to do this, or managing an api key.
   As no data source nor api key were provided, I signed up for one.
+* Temperature is saved and managed in kelvin, converted to fahrenheit when
+  returning data.
 
 # Further notes:
 I did not come up with all the code below in a clean room; I relied on
@@ -57,11 +59,11 @@ import json
 # -----------------------
 # Statics / defaults
 # -----------------------
-sqlite_db_file = './temperature.sqlite'
+sqlite_db_file = "./temperature.sqlite"
 # API information - https://openweathermap.org/current
 temperature_source_api = "https://api.openweathermap.org/data/2.5/weather"
 temperature_source_key = sys.argv[0]
-location='Portland,OR,USA'
+location="Portland,OR,USA"
 
 # -----------------------
 # functions
@@ -90,30 +92,41 @@ def create_sqlite_table(conn, create_sqlite_table_sql):
     except Error as e:
         print(e)
 
-def save_temperature_to_sqlite()
+def save_temperature_to_sqlite():
     #TODO
 
-def get_temperature_from_sqlite()
+def get_temperature_from_sqlite():
     #TODO
     now = int(time.time())
     
-def get_temperature_from_source()
+def get_temperature_from_source():
     # inspiration:
     # https://www.geeksforgeeks.org/python-find-current-weather-of-any-city-using-openweathermap-api/
+    # failure to obtain temperature will return 0, which is theoretical only
     source_query = "?appid=" + temperature_source_key + "&q=" + location
     source_url = temperature_source_api + source_query
-    #TODO error handle below - including checking for non '200' response
-    source_response = requests.get(source_url)
-    current_kelvin = source_response.json()["main"]["temp"]
-    return current_kelvin
+    try:
+        source_response = requests.get(source_url)
+    except:
+        # failed to get data
+        return 0
+    if int(source_response.json()["cod"]) is not 200:
+        # http response code is not 200
+        return 0
+    try:
+        source_kelvin = int(source_response.json()["main"]["temp"])
+    except:
+        # perhaps source data format changed
+        return 0
+    return source_kelvin
 
-def get_temperature()
+def get_temperature():
     # TODO
     # query DB for most recent temp
     # if greater then 5 minutes ago, obtain from source API, and save to db
 
 
-def main()
+def main():
     #TODO
     # start_listener here
 
