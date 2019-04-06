@@ -30,6 +30,7 @@ even if running inside a vagrant box itself running inside a vagrant instance.
 * Listen on port 8080 (for convenience > 1024)
 * Use library Requests to obtain temperature from configured source
 * Use library PySQLite to cache temperature
+* Use library time to get current epoch time
 
 # Further notes:
 I did not come up with all the code below in a clean room; I relied on
@@ -44,16 +45,17 @@ import re
 import sqlite3
 from sqlite3 import Error
 
+import time
+
+# -----------------------
 # Statics / defaults
+# -----------------------
+sqlite_db_file = './temperature.sqlite'
+# API information - https://www.weather.gov/documentation/services-web-api
+temperature_source_api = https://api.weather.gov
+temperature_source_key = 'rake74@gmail.com_for_NWEA_code_challenge'
 
-# API information
-# https://www.weather.gov/documentation/services-web-api
-sqlite_db_file = './temp.sqlite'
-temp_source_api = https://api.weather.gov
-temp_source_key = 'rake74@gmail.com_for_NWEA_code_challenge'
-temp
-
-def create_connection(db_file):
+def create_sqlite_connection(db_file):
     # http://www.sqlitetutorial.net/sqlite-python/create-tables/
     """ create a database connection to a SQLite database """
     try:
@@ -64,20 +66,20 @@ def create_connection(db_file):
     finally:
         conn.close()
 
-def create_table(conn, create_table_sql):
+def create_sqlite_table(conn, create_sqlite_table_sql):
     # http://www.sqlitetutorial.net/sqlite-python/create-tables/
-    """ create a table from the create_table_sql statement
+    """ create a table from the create_sqlite_table_sql statement
     :param conn: Connection object
-    :param create_table_sql: a CREATE TABLE statement
+    :param create_sqlite_table_sql: a CREATE TABLE statement
     :return:
     """
     try:
         c = conn.cursor()
-        c.execute(create_table_sql)
+        c.execute(create_sqlite_table_sql)
     except Error as e:
         print(e)
 
-def get_temp()
+def get_temperature()
     # TODO
     # query DB for most recent temp
     # if greater then 5 minutes ago, obtain from source API, and save to db
