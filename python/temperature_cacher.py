@@ -174,8 +174,8 @@ def get_temperature_from_source(location):
 def kelvin_to_x(kelvin):
     try:
         kelvin=int(kelvin)
-    except:
-        return 666  # rely on user to let us know for now I s'pose
+    except Error as e:
+        return e # rely on user to let us know for now I s'pose
     # default to fahrenheit because it's what my parents used
     if (temperature_scale == 'k' or temperature_scale == 'kelvin'):
         return int(kelvin)
@@ -212,7 +212,7 @@ def get_temperature(conn,location):
     retval['query_time'] = now
     if len(cached_result) is not 0:  # valid cache
         retval['cached_result'] = 'true'
-        temperature = cached_result[0]
+        temperature = cached_result[0][0]
     else:                            # no valid cache
         retval['cached_result'] = 'false'
         source_data = get_temperature_from_source(location)
