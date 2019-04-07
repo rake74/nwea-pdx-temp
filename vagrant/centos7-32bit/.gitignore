@@ -1,1 +1,3 @@
 .vagrant
+temperature_cacher.py
+temperature.sqlite

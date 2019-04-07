@@ -1,4 +1,4 @@
-# TODO
+# ToDo
 
 ## Task #1 ##
 * script
@@ -13,7 +13,7 @@
   * use puppet provisioner to setup host
 * document REST API
 
-# COMPLETED
+# Completed
 
 ## Task #1 ##
 * setup github repo
@@ -26,17 +26,15 @@
 
 # Family, oncall, or Extra Credit
 
-## COMPLETED ##
-
+## Completed ##
 * script:
   * prep for use to allow for location in request query
 
-## MAYBE ##
-
+## Maybe ##
 * script:
   * implement api allowing for location in request query
 
-## MAAAAAYBE ##
+## Maaaaaybe ##
 * use puppet provisioner to deploy and configure PostgreSQL (easy)
 * script:
   * switch to PostgreSQL (maybe easy?)
