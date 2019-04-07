@@ -38,12 +38,18 @@ even if running inside a vagrant box itself running inside a vagrant instance.
   As no data source nor api key were provided, I signed up for one.
 * Temperature is saved and managed in kelvin, converted to fahrenheit when
   returning data.
-* location is tracked - in the hopes I get to extra credit
+* location is tracked - in the hopes I get to the extra credit item
 
 # Further notes:
 I did not come up with all the code below in a clean room; I relied on
 identifying methods to accomplish the various tasks. When code has been
 sourced from another location, I will indicate so.
+But to get really real, this is my third time diving into a python script, so
+we all know I looked up format or 'how to do X in python' for a lot of this.
+
+# Potential issues (within scope of challenge)
+* db connection is never closed.
+* old temperatures are never cleaned. db could eat the disk, quickly in prod.
 """
 
 import SocketServer
@@ -58,9 +64,6 @@ import time
 import requests
 import json
 
-#TODO remove this
-from pprint import pprint
-
 # -----------------------
 # Statics / defaults
 # -----------------------
@@ -69,7 +72,11 @@ sqlite_db_file = "./temperature.sqlite"
 # API information - https://openweathermap.org/current
 temperature_source_api = "https://api.openweathermap.org/data/2.5/weather"
 temperature_source_key = sys.argv[1]
+
+# these may be used to enable location or output scale per user query
 location="Portland, OR, USA"
+# location="Seattle, WA, USA"
+temperature_scale="fahrenheit"
 
 # -----------------------
 # functions
@@ -113,8 +120,8 @@ def save_temperature_to_sqlite(conn,now,location,source_data):
     # add location data to location table... if it's not already present
     check_location = """select lat_long, description FROM location
        WHERE lat_long = '%s'
-       AND   description='%s'"""
-    cursor.execute(check_location,lat_long,description)
+       AND   description='%s'""" %(lat_long,location)
+    cursor.execute(check_location)
     check_location_rows=cursor.fetchall()
     if len(check_location_rows) is 0:
         insert = """INSERT INTO location(lat_long, description)
@@ -125,31 +132,14 @@ def save_temperature_to_sqlite(conn,now,location,source_data):
         except Error as e:
             print(e)
 
-def get_temperature_from_sqlite(conn,location):
-    cursor = conn.cursor
-    recent_temperature_query = """SELECT timestamp,kelvin WHERE lat_long = '%s'"""
-    #TODO
-    return None
-
-def get_location_from_sqlite(conn,location):
-    # inspiration/modeling
-    # http://www.sqlitetutorial.net/sqlite-python/sqlite-python-select/
-    query = """SELECT lat_long FROM location WHERE description='%s'""" % location
-    cursor = conn.cursor()
-    cursor.execute(query)
-    rows = cursor.fetchall()
-    return rows
-
 def get_temperature_from_source(location):
-    # light inspiration:
+    # (now very) light inspiration:
     # https://www.geeksforgeeks.org/python-find-current-weather-of-any-city-using-openweathermap-api/
-    # expects source to return json
+    # this expects source to return json
     # failure to obtain temperature will return 0, which is theoretical only
     # will return lat_long, and kelvin, and an error if one occurred
     source_query = "?appid=" + temperature_source_key + "&q=" + location
     source_url = temperature_source_api + source_query
-    #TODO del me
-    print ("source url: " + source_url)
     retval = dict();
     retval['lat_long'] = '0,0'
     retval['kelvin'] = 0
@@ -181,33 +171,62 @@ def get_temperature_from_source(location):
     retval['error'] = ''
     return retval
 
+def kelvin_to_x(kelvin):
+    try:
+        kelvin=int(kelvin)
+    except:
+        return 666  # rely on user to let us know for now I s'pose
+    # default to fahrenheit because it's what my parents used
+    if (temperature_scale == 'k' or temperature_scale == 'kelvin'):
+        return int(kelvin)
+    if (temperature_scale == 'c' or temperature_scale == 'celsius'):
+        return int(kelvin-273.15)
+    return int((kelvin-273.15)*9/5+32)
+
 def get_temperature(conn,location):
     # query DB for most recent temperature for location
     # if greater then 5 minutes ago, obtain from source API, and save to db
     # cleanup location, e.g.: "Portland, OR , USA" becomes "Portland,OR,USA"
-    location=re.sub(
-                r'[ ]*,[ ]*',
-                ',',
-                location)
     now = int(time.time())
-    # check db for location, if not present, it's not cached
-    location_rows = get_location_from_sqlite(conn,location)
-    # TODO remove two rows below me
-    print ("location_rows type:", type(location_rows))
-    pprint(location_rows)
-    if len(location_rows) is 0:
+    max_timestamp = now - ( 5 * 60 )
+    # check for cached data
+    #   no matter the location used, lat-long, city name, etc., querying for
+    #   that location will return the same data.
+    #   data from upstream provider includes lat and long in response so cache
+    #   using that.
+    cached_query = """
+        SELECT   kelvin
+        FROM     temperature 
+        WHERE    timestamp >= %s 
+        AND      lat_long IN 
+                 ( 
+                        SELECT lat_long 
+                        FROM   location 
+                        WHERE  description = '%s') 
+        ORDER BY timestamp DESC
+        LIMIT 1""" %(max_timestamp,location)
+    cursor = conn.cursor()
+    cursor.execute(cached_query)
+    cached_result = cursor.fetchall()
+    retval = dict();
+    retval['query_time'] = now
+    if len(cached_result) is not 0:  # valid cache
+        retval['cached_result'] = 'true'
+        temperature = cached_result[0]
+    else:                            # no valid cache
+        retval['cached_result'] = 'false'
         source_data = get_temperature_from_source(location)
         if source_data['error'] is not '':
-            return {'query_time': 0, 'temperature': 0, 'error': source_data['error'] }
-        # save data to DB
-        save_temperature_to_sqlite(conn,now,location,source_data)
+            retval['temperature'] = 0
+            retval['error'] = source_data['error']
+            return retval
+        else:
+            temperature = source_data['kelvin']
+            save_temperature_to_sqlite(conn,now,location,source_data)
+    retval['temperature'] = kelvin_to_x(temperature)
+    return retval
 
-    temperature_rows = get_temperature_from_sqlite(conn,location)
-
-    return None
-
-def main():
-    #TODO
+def init_sqlite3_db():
     conn = create_sqlite_connection(sqlite_db_file)
     sql_init_temperature_db = """
         CREATE TABLE IF NOT EXISTS temperature(
@@ -223,11 +242,21 @@ def main():
             description text NOT NULL
         ); """
     init_sqlite_table(conn,sql_init_location_db)
+    return conn
+
+def main(location):
+    conn = init_sqlite3_db()
+    # cleanup described location
+    location=re.sub(
+                r'[ ]*,[ ]*',
+                ',',
+                location)
+    location=location.lower()
     # start_listener here
     # but instead:
     # iterative deving, not listening, just call from command line for now
-    current_temperature = get_temperature(conn,location)
-    print (current_temperature)
+    results = get_temperature(conn,location)
+    print (results)
 
 if __name__ == "__main__":
-    main()
+    main(location)
