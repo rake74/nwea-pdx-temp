@@ -6,7 +6,12 @@
 
 ## Task #2 ##
 * fixup vagrantfile to utilize puppet provisioner to configure box
-  * use puppet provisioner to setup host
+  * use puppet agent to setup host
+  ### Tasks ###
+  * install python-requests (from OS)
+  * ensure date and time are accurate
+  * download and start temperature_cacher.py
+    * api key will be tricky. local non-checked in hiera perhaps?
 * document REST API
 
 # Completed
@@ -22,6 +27,12 @@
 
 ## Task #2 ##
 * setup vagrant to start usable VM
+  * installed puppet 6 i386 for CentOS 6 on this CentOS 7 host via shell
+    provisioner. This seemed to the most expedient way to satisfy:
+    * running recent CentOS
+    * running 32 bit, so vagrant can be ran inside virtualbox instance
+    * have a recent version of puppet installed.
+    There may have been better methods, I tried a few w/o success. Time...
 * setup vagrant networking (ensure vagrant host can reach API)
 
 # Family, oncall, or Extra Credit
