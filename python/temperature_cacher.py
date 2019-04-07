@@ -41,11 +41,15 @@ even if running inside a vagrant box itself running inside a vagrant instance.
 * location is tracked - in the hopes I get to the extra credit item
 
 # Further notes:
-I did not come up with all the code below in a clean room; I relied on
-identifying methods to accomplish the various tasks. When code has been
-sourced from another location, I will indicate so.
-But to get really real, this is my third time diving into a python script, so
-we all know I looked up format or 'how to do X in python' for a lot of this.
+* I did not come up with all the code below in a clean room; I relied on
+  identifying methods to accomplish the various tasks. When code has been
+  sourced from another location, I will indicate so.
+  But to get really real, this is my third time diving into a python script, so
+  we all know I looked up format or 'how to do X in python' for a lot of this.
+* argument handling: I know how to do arguments in python 2 and 3, and support
+  both in a single script. However, for this challenge, and to conserve time
+  I'm keeping things simple.
+  TL;DR: yes, the argument handling here is lame.
 
 # Potential issues (within scope of challenge)
 * db connection is never closed.
@@ -67,11 +71,16 @@ import json
 # -----------------------
 # Statics / defaults
 # -----------------------
-
 sqlite_db_file = "./temperature.sqlite"
 # API information - https://openweathermap.org/current
+port = 8080
 temperature_source_api = "https://api.openweathermap.org/data/2.5/weather"
-temperature_source_key = sys.argv[1]
+
+# read source api key horrible from first argument
+try:
+    temperature_source_key = sys.argv[1]
+except:
+    sys.exit('API key required as first argument')
 
 # these may be used to enable location or output scale per user query
 location="Portland, OR, USA"
@@ -224,7 +233,8 @@ def get_temperature(conn,location):
             temperature = source_data['kelvin']
             save_temperature_to_sqlite(conn,now,location,source_data)
     retval['temperature'] = kelvin_to_x(temperature)
-    return retval
+    #return retval
+    return json.dumps(retval)
 
 def init_sqlite3_db():
     conn = create_sqlite_connection(sqlite_db_file)
@@ -244,7 +254,69 @@ def init_sqlite3_db():
     init_sqlite_table(conn,sql_init_location_db)
     return conn
 
-def main(location):
+# class required by SocketServer.ThreadingTCPServer
+class api_handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
+    # inspiration/starting points
+    # http://dwightreid.com/blog/2017/05/22/create-web-service-python-rest-api/
+    # https://gist.github.com/bradmontgomery/2219997
+    def method_not_allowed(_self):
+    # I tried to create a single method_not_allowed def and use that for the
+    #   all the 'not allowed methods', but that proved to be more difficult
+    #   then expected. Likely due to my inexperience with python.
+        _self.send_response(405)
+        _self.finish()
+        _self.connection.close()
+    def do_GET(self):
+        if re.match("/temperature", self.path) is not None:
+            conn = create_sqlite_connection(sqlite_db_file)
+            results = get_temperature(conn,location)
+            if "error" in results:
+                retcode = 500
+            else:
+                retcode = 200
+            self.send_response(retcode)
+            self.send_header("Content-type","application/json")
+            self.end_headers()
+            #self.wfile.write(json.dumps(results))
+            self.wfile.write(results)
+            self.finish()
+            self.connection.close()
+            return
+        self.send_response(403)
+    def do_HEAD(self):
+        self.send_response(405)
+        self.finish()
+        self.connection.close()
+    def do_POST(self): # might use to accept JSON to specify location
+        self.send_response(405)
+        self.finish()
+        self.connection.close()
+    def do_PUT(self):
+        self.send_response(405)
+        self.finish()
+        self.connection.close()
+    def do_DELETE(self):
+        self.send_response(405)
+        self.finish()
+        self.connection.close()
+    def do_CONNECT(self):
+        self.send_response(405)
+        self.finish()
+        self.connection.close()
+    def do_OPTIONS(self):
+        self.send_response(405)
+        self.finish()
+        self.connection.close()
+    def do_TRACE(self):
+        self.send_response(405)
+        self.finish()
+        self.connection.close()
+    def do_PATCH(self):
+        self.send_response(405)
+        self.finish()
+        self.connection.close()
+
+def main(location,port):
     conn = init_sqlite3_db()
     # cleanup described location
     location=re.sub(
@@ -252,11 +324,21 @@ def main(location):
                 ',',
                 location)
     location=location.lower()
+
+    # if second arg is test, run and exit sans listener
+    try:
+        arg_2 = sys.argv[2]
+    except:
+        arg_2 = ''
+        pass
+    if arg_2 == 'test':
+        results = get_temperature(conn,location)
+        print (results)
+        sys.exit()
     # start_listener here
-    # but instead:
-    # iterative deving, not listening, just call from command line for now
-    results = get_temperature(conn,location)
-    print (results)
+    httpd = SocketServer.ThreadingTCPServer(('', port),api_handler)
+    print "serving at port", port
+    httpd.serve_forever()
 
 if __name__ == "__main__":
-    main(location)
+    main(location,port)
