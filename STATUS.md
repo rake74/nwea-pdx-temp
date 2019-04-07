@@ -3,7 +3,6 @@
 ## Task #1 ##
 * script
   * contemplate fixing 'really big bug' never clearing old cache entries
-* make sure to add a copy of the DB to repo
 
 ## Task #2 ##
 * fixup vagrantfile to utilize puppet provisioner to configure box
@@ -19,6 +18,7 @@
   * caches temperature results, only using if 5m or less old
   * make temperature_cacher an HTTP API
     * ensure GET method
+* make sure to add a copy of the DB to repo
 
 ## Task #2 ##
 * setup vagrant to start usable VM
