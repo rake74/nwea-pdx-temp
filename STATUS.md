@@ -2,13 +2,10 @@
 
 ## Task #1 ##
 * script
-  * make temperature_cacher an HTTP API
-    * ensure GET method
   * contemplate fixing 'really big bug' never clearing old cache entries
 * make sure to add a copy of the DB to repo
 
 ## Task #2 ##
-* setup vagrant networking (ensure vagrant host can reach API)
 * fixup vagrantfile to utilize puppet provisioner to configure box
   * use puppet provisioner to setup host
 * document REST API
@@ -20,9 +17,12 @@
 * script
   * queries external API for live results
   * caches temperature results, only using if 5m or less old
+  * make temperature_cacher an HTTP API
+    * ensure GET method
 
 ## Task #2 ##
 * setup vagrant to start usable VM
+* setup vagrant networking (ensure vagrant host can reach API)
 
 # Family, oncall, or Extra Credit
 
