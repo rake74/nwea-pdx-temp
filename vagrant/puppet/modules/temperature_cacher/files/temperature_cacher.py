@@ -70,16 +70,18 @@ import time
 import requests
 import json
 from urlparse import urlsplit,parse_qs
-from pprint import pprint
+import urllib
 
 # -----------------------
 # Statics / defaults
 # -----------------------
 sqlite_db_file = "./temperature_cacher.sqlite"
-# API information - https://openweathermap.org/current
 port = 8080
+default_location = "Portland, OR, USA"
+# default_location = "Seattle, WA, USA"
+temperature_scale = "fahrenheit"
+# API information - https://openweathermap.org/current
 temperature_source_api = "https://api.openweathermap.org/data/2.5/weather"
-
 try:
     dir_path = os.path.dirname(os.path.realpath(__file__))
     apikey_file = open(dir_path+"/temperature_cacher.apikey", "r")
@@ -87,11 +89,6 @@ try:
     apikey_file.close
 except Error as e:
     sys.exit("API key file required: temperature_cacher.apikey\n" + e) 
-
-# these may be used to enable location or output scale per user query
-location="Portland, OR, USA"
-# location="Seattle, WA, USA"
-temperature_scale="fahrenheit"
 
 # -----------------------
 # functions
@@ -120,29 +117,40 @@ def init_sqlite_table(conn, create_sqlite_table_sql):
     except Error as e:
         print(e)
 
-def save_temperature_to_sqlite(conn,now,location,source_data):
+def save_temperature_to_sqlite(conn,now,description,fresh_data):
+    """
+    Cache time, lat_long, and temperature to temperature table
+    Cache description for lat_long to location table
+    """
     cursor = conn.cursor()
-    lat_long = str(source_data['lat_long'])
-    kelvin = int(source_data['kelvin'])
+    lat_long = str(fresh_data['lat_long'])
+    kelvin = int(fresh_data['kelvin'])
     # add data to temperature table
-    insert = """INSERT INTO temperature(timestamp, lat_long, kelvin)
-                VALUES (?,?,?)"""
+    insert = """
+        INSERT INTO temperature
+                    (timestamp, lat_long, kelvin)
+        VALUES      (?,?,?)"""
     try:
         cursor.execute(insert,(now,lat_long,kelvin))
         conn.commit()
     except Error as e:
         print(e)
-    # add location data to location table... if it's not already present
-    check_location = """select lat_long, description FROM location
-       WHERE lat_long = '%s'
-       AND   description='%s'""" %(lat_long,location)
-    cursor.execute(check_location)
-    check_location_rows=cursor.fetchall()
-    if len(check_location_rows) is 0:
-        insert = """INSERT INTO location(lat_long, description)
-                    VALUES (?,?)"""
+    # add description and lat_long mapping to location table if not present
+    check_description = """
+        SELECT lat_long,
+               description
+        FROM   location
+        WHERE  lat_long = '%s'
+               AND description = '%s'""" %(lat_long,description)
+    cursor.execute(check_description)
+    check_description_rows = cursor.fetchall()
+    if len(check_description_rows) == 0:
+        insert = """
+            INSERT INTO location
+                        (lat_long,description) 
+            VALUES      (?,?)"""
         try:
-            cursor.execute(insert,(lat_long,location))
+            cursor.execute(insert,(lat_long,description))
             conn.commit()
         except Error as e:
             print(e)
@@ -153,42 +161,47 @@ def get_temperature_from_source(location):
     # this expects source to return json
     # failure to obtain temperature will return 0, which is theoretical only
     # will return lat_long, and kelvin, and an error if one occurred
-    source_query = "?appid=" + temperature_source_key + "&q=" + location
+    source_query = "?q=" + urllib.quote(location) + \
+                   "&appid=" + temperature_source_key
     source_url = temperature_source_api + source_query
-    retval = dict();
-    retval['lat_long'] = '0,0'
-    retval['kelvin'] = 0
+    return_data = dict();
+    return_data['lat_long'] = '0,0'
+    return_data['kelvin'] = 0
+    return_data['source_url'] = source_url
     try:
         source_response = requests.get(source_url)
     except:
-        retval['error'] = 'failed to get data'
-        return retval
+        return_data['error'] = 'failed to get data'
+        return return_data
     try:
         source_response_json = source_response.json()
     except:
-        retval['error'] = 'failed to parse or convert to json/dict'
-        return retval
-    if source_response_json["cod"] is not 200:
-        retval['error'] = 'httpd code is not 200: ' + str(source_response_json["cod"])
-        return retval
+        return_data['error'] = 'failed to parse or convert to json/dict'
+        return return_data
+    if source_response_json["cod"] != 200:
+        return_data['error'] = 'httpd code is not 200: ' + str(source_response_json["cod"])
+        return return_data
     try:
-        retval['kelvin'] = int(source_response_json["main"]["temp"])
+        return_data['kelvin'] = int(source_response_json["main"]["temp"])
     except:
-        retval['error'] = 'temp not available, perhaps data source format change'
-        return retval
+        return_data['error'] = 'temp not available, perhaps data source format change'
+        return return_data
     try:
         lat = str(source_response_json["coord"]["lat"])
         lon = str(source_response_json["coord"]["lon"])
-        retval['lat_long'] = lat + "," + lon
+        return_data['lat_long'] = lat + "," + lon
     except:
-        retval['error'] = 'coords not available, perhaps data source format change'
-        return retval
-    retval['error'] = ''
-    return retval
+        return_data['error'] = 'coords not available, perhaps data source format change'
+        return return_data
+    return return_data
 
 def kelvin_to_x(kelvin):
+    """
+    convert kelvin to celsius or fahrenheit. If I missed a scale, should be
+    easy to add...
+    """
     try:
-        kelvin=int(kelvin)
+        kelvin = int(kelvin)
     except Error as e:
         return e # rely on user to let us know for now I s'pose
     # default to fahrenheit because it's what my parents used
@@ -198,10 +211,20 @@ def kelvin_to_x(kelvin):
         return int(kelvin-273.15)
     return int((kelvin-273.15)*9/5+32)
 
-def get_temperature(conn,location,usecache='true'):
-    # query DB for most recent temperature for location
-    # if greater then 5 minutes ago, obtain from source API, and save to db
-    # cleanup location, e.g.: "Portland, OR , USA" becomes "Portland,OR,USA"
+def get_temperature(conn,location,usecache = 'true'):
+    """
+    query DB for most recent temperature for location
+    if greater then 5 minutes ago, obtain from source API, and save to db
+
+    usecache != 'true' will skip _both_ checking and updating the cache.
+    """
+    # cleanup location
+    location = re.sub(
+                   r'[ ]*,[ ]*',
+                   ',',
+                   location)
+    location = location.lower()
+    # time vars
     now = int(time.time())
     max_timestamp = now - ( 5 * 60 )
     # check for cached data
@@ -209,7 +232,7 @@ def get_temperature(conn,location,usecache='true'):
     #   that location will return the same data.
     #   data from upstream provider includes lat and long in response so cache
     #   using that.
-    if usecache is 'true':
+    if usecache == 'true':                             # check cache
         cached_query = """
             SELECT   kelvin
             FROM     temperature 
@@ -225,26 +248,27 @@ def get_temperature(conn,location,usecache='true'):
         cursor.execute(cached_query)
         cached_result = cursor.fetchall()
     else:
-        cached_result = dict()
-    retval = dict()
-    retval['query_time'] = now
-    if len(cached_result) is not 0 and usecache is 'true': # use cache
-        retval['cached_result'] = 'true'
+        cached_result = list()
+    return_data = dict()
+    return_data['query_time'] = now
+    if len(cached_result) != 0 and usecache == 'true': # use cache result
+        return_data['cached_result'] = 'true'
         temperature = cached_result[0][0]
-    else:                            # no valid cache
-        retval['cached_result'] = 'false'
-        source_data = get_temperature_from_source(location)
-        if source_data['error'] is not '':
-            retval['temperature'] = 0
-            retval['error'] = source_data['error']
-            return retval
+    else:                                              # no valid cache
+        return_data['cached_result'] = 'false'
+        fresh_data = get_temperature_from_source(location)
+        #return_data['fresh_data'] = fresh_data
+        if 'error' in fresh_data:
+            return_data['temperature'] = 0
+            return_data['error'] = fresh_data['error']
+            return return_data
         else:
-            temperature = source_data['kelvin']
-            if usecache is 'true':
-                save_temperature_to_sqlite(conn,now,location,source_data)
-    retval['temperature'] = kelvin_to_x(temperature)
-    #return retval
-    return json.dumps(retval)
+            temperature = fresh_data['kelvin']
+            if usecache == 'true':                     # cache new result
+                save_temperature_to_sqlite(conn,now,location,fresh_data)
+    return_data['temperature'] = kelvin_to_x(temperature)
+    #return_data['location'] = location
+    return json.dumps(return_data)
 
 def init_sqlite3_db():
     conn = create_sqlite_connection(sqlite_db_file)
@@ -291,14 +315,9 @@ class api_handler(BaseHTTPRequestHandler):
             return
         query = parse_qs(url_split.query)
         if 'city' in query:
-            my_location = str(query['city'][0])
+            my_location = query['city'][0]
         else:
-            my_location = str(location)
-        my_location=re.sub(
-                    r'[ ]*,[ ]*',
-                    ',',
-                    my_location)
-        my_location=my_location.lower()
+            my_location = default_location
         conn = create_sqlite_connection(sqlite_db_file)
         results = get_temperature(conn,my_location)
         if "error" in results:
@@ -327,26 +346,22 @@ class api_handler(BaseHTTPRequestHandler):
     def do_PATCH(self):
         method_not_allowed(self)
 
-def main(location,port):
+def main():
     conn = init_sqlite3_db()
-    # cleanup described location
-    location=re.sub(
-                r'[ ]*,[ ]*',
-                ',',
-                location)
-    location=location.lower()
     # run self test using oddball location
-    self_test = get_temperature(conn,'grytviken,gs','false')
-    if 'error' in self_test:
-        print(self_test)
+    startup_self_test = get_temperature(conn,'grytviken,gs','false')
+    if 'error' in startup_self_test:
+        #startup_self_test['startup_self_test'] = 'failure'
+ 	print('startup_self_test failed')
+        print(startup_self_test)
         sys.exit(1)
 
-    # if test is an arg, run and exit sans listener
+    # if test is an arg, run and exit sans listener using default_location
     if 'test' in sys.argv:
         if 'nocache' in sys.argv:
-            results = get_temperature(conn,location,'false')
+            results = get_temperature(conn,default_location,'false')
         else:
-            results = get_temperature(conn,location)
+            results = get_temperature(conn,default_location)
         print (results)
         if 'error' in results:
           sys.exit(1)
@@ -357,4 +372,4 @@ def main(location,port):
     httpd.serve_forever()
 
 if __name__ == "__main__":
-    main(location,port)
+    main()
