@@ -69,6 +69,15 @@ Vagrant.configure("2") do |config|
   #   apt-get install -y apache2
   # SHELL
   config.vm.provision :shell,
-    :inline     => "yum -y -q -e0 --color=never --noplugins install http://yum.puppet.com/puppet6/el/6/i386/puppet-agent-6.4.0-1.el6.i386.rpm ",
+    :inline     => "yum -y -q --color=never --noplugins install http://yum.puppet.com/puppet6/el/6/i386/puppet-agent-6.4.0-1.el6.i386.rpm ",
     :privileged => true
+
+  config.vm.provision "puppet" do |puppet|
+    puppet.binary_path       = '/opt/puppetlabs/puppet/bin'
+    puppet.manifest_file     = 'site.pp'
+    puppet.manifests_path    = 'puppet/manifests'
+    puppet.module_path       = 'puppet/modules'
+    puppet.hiera_config_path = 'puppet/hiera.yaml'
+    puppet.options           = '--test'
+  end
 end

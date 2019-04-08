@@ -1,0 +1,9 @@
+[Unit]
+Description=Temperature Cacher service
+
+[Service]
+Type=simple
+ExecStart=/opt/temperature_cacher/temperature_cacher.py
+
+[Install]
+WantedBy=multi-user.target

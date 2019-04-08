@@ -1,0 +1,2 @@
+---
+temperature_cacher::apikey: 'get your API key at https://openweathermap.org/api'
