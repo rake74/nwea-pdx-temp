@@ -35,6 +35,10 @@ class temperature_cacher::base_setup {
       ensure => directory,
       mode   => '2775',
     ;
+    '/opt/temperature_cacher/temperature_cacher.sqlite':
+      ensure => 'present',
+      mode   => '0664',
+    ;
     '/opt/temperature_cacher/temperature_cacher.py':
       ensure => present,
       source => 'puppet:///modules/temperature_cacher/temperature_cacher.py',
