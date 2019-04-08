@@ -60,6 +60,7 @@ import SocketServer
 import SimpleHTTPServer
 import re
 import sys
+import os
 
 import sqlite3
 from sqlite3 import Error
@@ -71,16 +72,18 @@ import json
 # -----------------------
 # Statics / defaults
 # -----------------------
-sqlite_db_file = "./temperature.sqlite"
+sqlite_db_file = "./temperature_cacher.sqlite"
 # API information - https://openweathermap.org/current
 port = 8080
 temperature_source_api = "https://api.openweathermap.org/data/2.5/weather"
 
-# read source api key horrible from first argument
 try:
-    temperature_source_key = sys.argv[1]
-except:
-    sys.exit('API key required as first argument')
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    apikey_file = open(dir_path+"/temperature_cacher.apikey", "r")
+    temperature_source_key = apikey_file.readline().rstrip()
+    apikey_file.close
+except Error as e:
+    sys.exit("API key file required: temperature_cacher.apikey\n" + e) 
 
 # these may be used to enable location or output scale per user query
 location="Portland, OR, USA"
@@ -192,7 +195,7 @@ def kelvin_to_x(kelvin):
         return int(kelvin-273.15)
     return int((kelvin-273.15)*9/5+32)
 
-def get_temperature(conn,location):
+def get_temperature(conn,location,usecache='true'):
     # query DB for most recent temperature for location
     # if greater then 5 minutes ago, obtain from source API, and save to db
     # cleanup location, e.g.: "Portland, OR , USA" becomes "Portland,OR,USA"
@@ -219,7 +222,7 @@ def get_temperature(conn,location):
     cached_result = cursor.fetchall()
     retval = dict();
     retval['query_time'] = now
-    if len(cached_result) is not 0:  # valid cache
+    if len(cached_result) is not 0 and usecache is 'true': # use cache
         retval['cached_result'] = 'true'
         temperature = cached_result[0][0]
     else:                            # no valid cache
@@ -267,7 +270,7 @@ class api_handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
         _self.finish()
         _self.connection.close()
     def do_GET(self):
-        if re.match("/temperature", self.path) is not None:
+        if re.match('/temperature$', self.path) is not None:
             conn = create_sqlite_connection(sqlite_db_file)
             results = get_temperature(conn,location)
             if "error" in results:
@@ -324,16 +327,21 @@ def main(location,port):
                 ',',
                 location)
     location=location.lower()
+    # run self test using oddball location
+    self_test = get_temperature(conn,'grytviken,gs','false')
+    if 'error' in self_test:
+        print(self_test)
+        sys.exit(1)
 
-    # if second arg is test, run and exit sans listener
-    try:
-        arg_2 = sys.argv[2]
-    except:
-        arg_2 = ''
-        pass
-    if arg_2 == 'test':
-        results = get_temperature(conn,location)
+    # if test is an arg, run and exit sans listener
+    if 'test' in sys.argv:
+        if 'nocache' in sys.argv:
+            results = get_temperature(conn,location,'false')
+        else:
+            results = get_temperature(conn,location)
         print (results)
+        if 'error' in results:
+          sys.exit(1)
         sys.exit()
     # start_listener here
     httpd = SocketServer.ThreadingTCPServer(('', port),api_handler)
