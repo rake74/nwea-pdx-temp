@@ -75,7 +75,7 @@ import urllib
 # -----------------------
 # Statics / defaults
 # -----------------------
-sqlite_db_file = "./temperature_cacher.sqlite"
+sqlite_db_file = "/opt/temperature_cacher/temperature_cacher.sqlite"
 port = 8080
 default_location = "Portland, OR, USA"
 # default_location = "Seattle, WA, USA"

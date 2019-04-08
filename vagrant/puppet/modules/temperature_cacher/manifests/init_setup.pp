@@ -14,9 +14,10 @@ class temperature_cacher::init_setup {
   }
 
   service {'temperature_cacher.service':
-    ensure  => running,
-    enable  => true,
-    require => File['/lib/systemd/system/temperature_cacher.service'],
+    ensure     => running,
+    enable     => true,
+    require    => File['/lib/systemd/system/temperature_cacher.service'],
+    hasrestart => false,
   }
 
 }

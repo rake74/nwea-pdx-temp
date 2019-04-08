@@ -2,8 +2,10 @@
 Description=Temperature Cacher service
 
 [Service]
+User=temperature_cacher
+Group=temperature_cacher
 Type=simple
-ExecStart=/opt/temperature_cacher/temperature_cacher.py
+ExecStart=/usr/bin/python /opt/temperature_cacher/temperature_cacher.py
 
 [Install]
 WantedBy=multi-user.target

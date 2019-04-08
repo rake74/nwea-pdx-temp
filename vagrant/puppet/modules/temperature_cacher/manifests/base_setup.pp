@@ -33,6 +33,7 @@ class temperature_cacher::base_setup {
     ;
     '/opt/temperature_cacher':
       ensure => directory,
+      mode   => '2775',
     ;
     '/opt/temperature_cacher/temperature_cacher.py':
       ensure => present,
