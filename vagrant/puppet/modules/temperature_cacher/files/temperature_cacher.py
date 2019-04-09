@@ -22,23 +22,20 @@ even if running inside a vagrant box itself running inside a vagrant instance.
 
 # Implementation details
 
-* Use libraries SocketServer and SimpleHTTPServer to implement listener
-  I am aware python does not recommend this for production use, but as a first
-  go at creating an HTTP API via Python I am running with it. For production
-  I would certainly suggest more research and implementation for an acceptable
-  'production' use Python HTTP library.
+* Use BaseHTTPServer to implement listener
 * Listen on port 8080 (for convenience > 1024)
 * Use library Requests to obtain temperature from configured source
 * Use library PySQLite to cache temperature
 * Use library time to get current epoch time
 * Use library requests to obtain temperature data
 * Use library json to return, and obtain temperature data
-* openweathermap api key is required as first argument
-  There's certainly better ways to do this, or managing an api key.
-  As no data source nor api key were provided, I signed up for one.
+* Use library urllib to quote encode location when querying source
+* Use library urlparse to parse request from user
+* openweathermap api key is required in hiera
 * Temperature is saved and managed in kelvin, converted to fahrenheit when
-  returning data.
-* location is tracked - in the hopes I get to the extra credit item
+  returning data. Enabled future improvement for user to set returned temp scale
+* location is tracked as lat_long in temperature cache/db, lat_long and user
+  provided city description are tracked in location cache/db.
 
 # Further notes:
 * I did not come up with all the code below in a clean room; I relied on
